@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 
 // ===== OneSignal Config =====
 const ONESIGNAL_APP_ID = 'b5cbe5cf-26d3-4361-b818-8ece981d2fe4';
-const ONESIGNAL_REST_API_KEY = 'os_v2_app_wxf6ltzg2nbwdoayr3hjqhjp4sszjj25l5qejwuuzmg4nilcpugshzjkogtdn75trijrussimqqtcu2hnbtr42etelgk2qzjsub6riq';
+const ONESIGNAL_REST_API_KEY = 'os_v2_app_wxf6ltzg2nbwdoayr3hjqhjp4skvxqceg2aeen5lbahmvnbqxlcppofxh7tmxrijwsk4getnknzzwq2fvtarjqe2oouyaxbd6cupm6a';
 
 // Initialize Firebase Admin
 // Note: For Render deployment, set FIREBASE_SERVICE_ACCOUNT env variable

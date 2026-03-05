@@ -276,12 +276,14 @@ app.post('/api/broadcast', async (req, res) => {
         const response = await fetch('https://api.onesignal.com/notifications', {
             method: 'POST',
             headers: {
+                'accept': 'application/json',
                 'Content-Type': 'application/json',
                 'Authorization': `Key ${ONESIGNAL_REST_API_KEY}`
             },
             body: JSON.stringify({
                 app_id: ONESIGNAL_APP_ID,
-                included_segments: ['All'],
+                target_channel: 'push',
+                included_segments: ['Subscribed Users'],
                 headings: { en: title },
                 contents: { en: message },
                 data: { type: 'broadcast' }
@@ -289,6 +291,11 @@ app.post('/api/broadcast', async (req, res) => {
         });
 
         const result = await response.json();
+        if (result.errors && !result.id) {
+            console.error('OneSignal broadcast error:', result.errors);
+            return res.status(400).json({ error: 'Failed to push to OneSignal', details: result.errors });
+        }
+
         res.json({ success: true, notificationId: result.id });
 
     } catch (error) {

@@ -172,6 +172,63 @@ app.get('/api/transactions/:userId', async (req, res) => {
     }
 });
 
+// ===== Transaction Sync Endpoint =====
+app.post('/api/transaction/sync', async (req, res) => {
+    try {
+        const { userId, transactionId, source, sourceApp, status, rawMessage, timestamp } = req.body;
+
+        if (!userId || !transactionId) {
+            return res.status(400).json({ error: 'userId and transactionId are required' });
+        }
+
+        const docId = uuidv4();
+
+        // Save transaction to Firestore if not already exists
+        const existingSnap = await db.collection('transactions')
+            .where('transactionId', '==', transactionId)
+            .where('userId', '==', userId)
+            .get();
+
+        if (existingSnap.empty) {
+            await db.collection('transactions').doc(docId).set({
+                id: docId,
+                userId,
+                transactionId,
+                source: source || 'notification',
+                sourceApp: sourceApp || 'unknown',
+                status: status || 'pending',
+                rawMessage: rawMessage || '',
+                timestamp: timestamp || Date.now()
+            });
+
+            // Trigger Activity
+            await db.collection('activity').add({
+                id: uuidv4(),
+                userId: userId,
+                type: 'transaction',
+                message: `Transaction ${transactionId} captured from ${sourceApp}`,
+                timestamp: Date.now(),
+                status: 'pending'
+            });
+
+            // Attempt to trigger webhook automatically
+            sendWebhook(userId, {
+                event: 'transaction.received',
+                transactionId: transactionId,
+                status: 'pending',
+                source: sourceApp,
+                timestamp: Date.now()
+            });
+        }
+
+        res.json({ success: true, message: 'Transaction synced' });
+
+    } catch (error) {
+        console.error('Error syncing:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // ===== Webhook Endpoint =====
 app.post('/api/webhook/register', async (req, res) => {
     try {
@@ -283,7 +340,7 @@ app.post('/api/broadcast', async (req, res) => {
             body: JSON.stringify({
                 app_id: ONESIGNAL_APP_ID,
                 target_channel: 'push',
-                included_segments: ['Subscribed Users'],
+                included_segments: ['Active Users'],
                 headings: { en: title },
                 contents: { en: message },
                 data: { type: 'broadcast' }

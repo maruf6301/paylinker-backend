@@ -84,18 +84,36 @@ app.post('/api/validate', async (req, res) => {
             });
         }
 
-        const txData = txSnap.docs[0].data();
+        const txDoc = txSnap.docs[0];
+        const txData = txDoc.data();
 
-        // Update API key usage
+        // Enforce Single-Use (Auto Payment Gateway Pro Level)
+        if (txData.status === 'success' || txData.status === 'verified') {
+            return res.status(400).json({
+                valid: false,
+                message: 'Transaction has already been used/verified previously.'
+            });
+        }
+
+        // Check expiration logic if needed, or simply update usage
+        const now = Date.now();
+
+        // Update API key usage (Track daily usage for the 7-day graph)
+        const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const currentStats = keyData.dailyStats || {};
+        const newDailyCount = (currentStats[dateStr] || 0) + 1;
+
         await keyDoc.ref.update({
-            lastUsed: Date.now(),
-            totalRequests: admin.firestore.FieldValue.increment(1)
+            lastUsed: now,
+            totalRequests: admin.firestore.FieldValue.increment(1),
+            [`dailyStats.${dateStr}`]: newDailyCount
         });
 
-        // Update transaction status
-        await txSnap.docs[0].ref.update({
+        // Update transaction status to verified so it can never be used again
+        await txDoc.ref.update({
             status: 'success',
-            apiKeyUsed: apiKey
+            apiKeyUsed: apiKey,
+            verifiedAt: now
         });
 
         // Add activity
@@ -127,9 +145,12 @@ app.post('/api/validate', async (req, res) => {
         return res.json({
             valid: true,
             transactionId: txData.transactionId,
-            status: txData.status,
+            status: 'success',
             source: txData.source,
-            timestamp: txData.timestamp
+            sourceApp: txData.sourceApp,
+            rawMessage: txData.rawMessage, // Provides access to "koto tk"
+            timestamp: txData.timestamp,
+            verifiedAt: Date.now()
         });
 
     } catch (error) {
@@ -168,6 +189,58 @@ app.get('/api/transactions/:userId', async (req, res) => {
 
     } catch (error) {
         console.error('Error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// ===== API Stats for App Terminal =====
+app.get('/api/terminal/stats/:apiKey', async (req, res) => {
+    try {
+        const { apiKey } = req.params;
+
+        const keysSnap = await db.collection('api_keys')
+            .where('key', '==', apiKey)
+            .get();
+
+        if (keysSnap.empty) {
+            return res.status(404).json({ error: 'API key not found' });
+        }
+
+        const keyData = keysSnap.docs[0].data();
+
+        if (!keyData.isActive) {
+            return res.json({
+                isActive: false,
+                message: 'API key is inactive or revoked.'
+            });
+        }
+
+        // Construct 7-day graph data
+        const graphData = [];
+        const dailyStats = keyData.dailyStats || {};
+
+        for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const dateStr = d.toISOString().split('T')[0];
+            const displayDate = dateStr.slice(5); // MM-DD
+            graphData.push({
+                date: displayDate,
+                fullDate: dateStr,
+                calls: dailyStats[dateStr] || 0
+            });
+        }
+
+        res.json({
+            isActive: true,
+            appName: keyData.appName || 'Unknown Website/App',
+            totalRequests: keyData.totalRequests || 0,
+            createdAt: keyData.createdAt,
+            graphData: graphData
+        });
+
+    } catch (error) {
+        console.error('Terminal stats error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

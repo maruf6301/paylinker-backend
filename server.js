@@ -413,7 +413,7 @@ app.post('/api/broadcast', async (req, res) => {
             body: JSON.stringify({
                 app_id: ONESIGNAL_APP_ID,
                 target_channel: 'push',
-                included_segments: ['Active Users'],
+                included_segments: ['Total Subscriptions', 'Subscribed Users', 'Active Users'],
                 headings: { en: title },
                 contents: { en: message },
                 data: { type: 'broadcast' }

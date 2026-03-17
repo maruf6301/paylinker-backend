@@ -2,6 +2,19 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const { v4: uuidv4 } = require('uuid');
+const multer = require('multer');
+const { createClient } = require('@supabase/supabase-js');
+
+// ===== Supabase Config =====
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://jksfryhgtskquuufivnu.supabase.co';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imprc2ZyeWhndHNrcXV1dWZpdm51Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MzY3MTU5OCwiZXhwIjoyMDg5MjQ3NTk4fQ.AnO3AYPWFMZwha8JeDeOIEy2UB68Z7oaW8rGT8hnnII';
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+// ===== Multer Config =====
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
 
 // ===== OneSignal Config =====
 const ONESIGNAL_APP_ID = 'b5cbe5cf-26d3-4361-b818-8ece981d2fe4';
@@ -41,6 +54,51 @@ app.get('/', (req, res) => {
 
 app.get('/health', (req, res) => {
     res.json({ status: 'healthy' });
+});
+
+// ===== Profile Image Upload =====
+app.post('/api/upload-profile-image', upload.single('image'), async (req, res) => {
+    try {
+        const file = req.file;
+        const { userId } = req.body;
+
+        if (!file) {
+            return res.status(400).json({ error: 'No image file uploaded' });
+        }
+        if (!userId) {
+            return res.status(400).json({ error: 'userId is required' });
+        }
+
+        // Generate a unique filename: userId-timestamp.ext
+        const fileExt = file.originalname.split('.').pop();
+        const fileName = `${userId}-${Date.now()}.${fileExt}`;
+
+        // Upload to Supabase Storage
+        const { data, error } = await supabase
+            .storage
+            .from('profile_images')
+            .upload(fileName, file.buffer, {
+                contentType: file.mimetype,
+                upsert: true
+            });
+
+        if (error) {
+            console.error('Supabase upload error:', error);
+            return res.status(500).json({ error: 'Failed to upload to storage', details: error.message });
+        }
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase
+            .storage
+            .from('profile_images')
+            .getPublicUrl(fileName);
+
+        res.json({ success: true, url: publicUrl });
+
+    } catch (error) {
+        console.error('Image upload error:', error);
+        res.status(500).json({ error: 'Internal server error during upload' });
+    }
 });
 
 // ===== API Key Validation =====

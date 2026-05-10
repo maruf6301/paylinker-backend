@@ -207,6 +207,7 @@ app.post('/api/validate', async (req, res) => {
             source: txData.source,
             sourceApp: txData.sourceApp,
             rawMessage: txData.rawMessage, // Provides access to "koto tk"
+            sender: txData.sender || '',
             timestamp: txData.timestamp,
             verifiedAt: Date.now()
         });
@@ -306,7 +307,7 @@ app.get('/api/terminal/stats/:apiKey', async (req, res) => {
 // ===== Transaction Sync Endpoint =====
 app.post('/api/transaction/sync', async (req, res) => {
     try {
-        const { userId, transactionId, source, sourceApp, status, rawMessage, timestamp } = req.body;
+        const { userId, transactionId, source, sourceApp, status, rawMessage, timestamp, sender } = req.body;
 
         if (!userId || !transactionId) {
             return res.status(400).json({ error: 'userId and transactionId are required' });
@@ -329,7 +330,8 @@ app.post('/api/transaction/sync', async (req, res) => {
                 sourceApp: sourceApp || 'unknown',
                 status: status || 'pending',
                 rawMessage: rawMessage || '',
-                timestamp: timestamp || Date.now()
+                timestamp: timestamp || Date.now(),
+                sender: sender || ''
             });
 
             // Trigger Activity
